@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Voice Assistant</title>
+  <title>Smrithul AI</title>
 
   <style>
     body {
@@ -14,15 +14,13 @@
       color: white;
       text-align: center;
     }
-
     .container {
       max-width: 500px;
-      margin: 40px auto;
+      margin: 20px auto;
       padding: 25px;
       background: #1e293b;
       border-radius: 16px;
     }
-
     input {
       box-sizing: border-box;
       width: 100%;
@@ -32,7 +30,6 @@
       border: none;
       font-size: 16px;
     }
-
     button {
       padding: 12px 18px;
       margin: 6px;
@@ -43,34 +40,77 @@
       font-size: 16px;
       cursor: pointer;
     }
-
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
     #answer {
       margin-top: 20px;
       line-height: 1.6;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
+
+    /* Avatar */
+    #avatar { width: 220px; height: 242px; display: block; margin: 0 auto 10px; }
+    #head { transform-origin: 100px 150px; }
+    #avatar.talking #head { animation: bob 0.5s ease-in-out infinite; }
+    @keyframes bob {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(1.5px) rotate(0.8deg); }
+    }
+    .brow { transition: transform 0.15s; }
+    .eye-group {
+      transform-box: fill-box;
+      transform-origin: center;
+      transition: transform 0.08s;
+    }
+    #avatar.listening .eye-group { transform: scale(1.15); }
+    .eye-group.blink { transform: scaleY(0.1); }
   </style>
 </head>
 
 <body>
   <div class="container">
-    <h1>AI Voice Assistant</h1>
-    <p>Ask me anything, just like ChatGPT!</p>
 
-    <input
-      id="question"
-      type="text"
-      placeholder="Type your question here"
-    >
+    <svg id="avatar" viewBox="0 0 200 220">
+      <!-- body -->
+      <path d="M25 220 Q32 178 100 172 Q168 178 175 220 Z" fill="#38bdf8"/>
+      <rect x="88" y="145" width="24" height="35" fill="#e0aa84"/>
 
+      <g id="head">
+        <!-- hair back -->
+        <ellipse cx="100" cy="92" rx="62" ry="68" fill="#2b1d16"/>
+        <!-- face -->
+        <ellipse cx="100" cy="100" rx="52" ry="60" fill="#f1c4a0"/>
+        <!-- hair front -->
+        <path d="M46 90 Q50 34 100 32 Q150 34 154 90 Q130 60 100 62 Q70 60 46 90 Z" fill="#2b1d16"/>
+        <!-- cheeks -->
+        <circle cx="66" cy="118" r="9" fill="#f08a8a" opacity="0.3"/>
+        <circle cx="134" cy="118" r="9" fill="#f08a8a" opacity="0.3"/>
+        <!-- eyebrows -->
+        <path id="browL" class="brow" d="M68 82 Q80 76 92 81" stroke="#2b1d16" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <path id="browR" class="brow" d="M108 81 Q120 76 132 82" stroke="#2b1d16" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <!-- eyes -->
+        <g class="eye-group">
+          <ellipse cx="80" cy="98" rx="8" ry="9" fill="#fff"/>
+          <circle cx="80" cy="99" r="4.5" fill="#1f2937"/>
+          <circle cx="78.5" cy="97" r="1.5" fill="#fff"/>
+        </g>
+        <g class="eye-group">
+          <ellipse cx="120" cy="98" rx="8" ry="9" fill="#fff"/>
+          <circle cx="120" cy="99" r="4.5" fill="#1f2937"/>
+          <circle cx="118.5" cy="97" r="1.5" fill="#fff"/>
+        </g>
+        <!-- nose -->
+        <path d="M97 108 Q100 116 103 108" stroke="#c98d68" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <!-- mouth -->
+        <path id="mouth" d="M82 130 Q100 144 118 130 Q100 140 82 130 Z" fill="#8b2c3a" stroke="#8b2c3a" stroke-width="1.5" stroke-linejoin="round"/>
+      </g>
+    </svg>
+
+    <h1>Smrithul AI</h1>
+    <p>Say "Smrithul" or ask me anything!</p>
+
+    <input id="question" type="text" placeholder="Type your question here">
     <br>
-
     <button id="askButton">Ask AI</button>
     <button id="micButton">🎤 Speak</button>
 
@@ -78,64 +118,208 @@
   </div>
 
   <script>
-    // Replace this with your actual Cloudflare Worker URL.
-    const WORKER_URL =
-      "https://shiny-boat-555f.smrithul79.workers.dev";
+    const WORKER_URL = "https://shiny-boat-555f.smrithul79.workers.dev";
+
+    // Permanent session ID for saved history
+    let sessionId = localStorage.getItem("sessionId");
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem("sessionId", sessionId);
+    }
 
     const questionInput = document.getElementById("question");
     const answerDiv = document.getElementById("answer");
     const askButton = document.getElementById("askButton");
     const micButton = document.getElementById("micButton");
 
+    /* ================= AVATAR ================= */
+    const avatar = document.getElementById("avatar");
+    const mouth = document.getElementById("mouth");
+    const browL = document.getElementById("browL");
+    const browR = document.getElementById("browR");
+
+    const MOUTHS = {
+      smile:  "M82 130 Q100 144 118 130 Q100 140 82 130 Z",
+      closed: "M84 132 Q100 139 116 132 Q100 135 84 132 Z",
+      S:      "M86 131 Q100 127 114 131 Q100 146 86 131 Z",
+      E:      "M80 130 Q100 125 120 130 Q100 148 80 130 Z",
+      A:      "M85 128 Q100 123 115 128 Q120 152 100 156 Q80 152 85 128 Z",
+      O:      "M91 132 A9 11 0 1 0 109 132 A9 11 0 1 0 91 132 Z"
+    };
+
+    function setMouth(name) {
+      mouth.setAttribute("d", MOUTHS[name] || MOUTHS.closed);
+    }
+
+    function setBrows(l, r) {
+      browL.style.transform = "translateY(" + l + "px)";
+      browR.style.transform = "translateY(" + r + "px)";
+    }
+
+    let state = "idle";
+    function setState(s) {
+      state = s;
+      avatar.classList.toggle("listening", s === "listening");
+      if (s === "idle")      { setMouth("smile");  setBrows(0, 0); }
+      if (s === "listening") { setMouth("closed"); setBrows(-5, -5); }
+      if (s === "thinking")  { setMouth("S");      setBrows(-6, 0); }
+      if (s === "speaking")  { setBrows(0, 0); }
+    }
+
+    // Blinking
+    const eyeGroups = document.querySelectorAll(".eye-group");
+    function blinkLoop() {
+      eyeGroups.forEach(function (g) { g.classList.add("blink"); });
+      setTimeout(function () {
+        eyeGroups.forEach(function (g) { g.classList.remove("blink"); });
+      }, 120);
+      setTimeout(blinkLoop, 2000 + Math.random() * 3000);
+    }
+    blinkLoop();
+
+    // Letter -> mouth shape
+    function charToViseme(c) {
+      c = c.toLowerCase();
+      if ("a".includes(c)) return "A";
+      if ("ei".includes(c)) return "E";
+      if ("ouw".includes(c)) return "O";
+      if ("mbp".includes(c)) return "closed";
+      if (/[a-z]/.test(c)) return "S";
+      return "closed";
+    }
+
+    function wordToQueue(word) {
+      const q = [];
+      for (const ch of word) {
+        const v = charToViseme(ch);
+        if (q[q.length - 1] !== v) q.push(v);
+      }
+      q.push("closed");
+      return q;
+    }
+
+    let talking = false;
+    let boundarySeen = false;
+    let queue = [];
+    let charPos = 0;
+    let speakText = "";
+    let currentUtterance = null;
+
+    // Mouth animation ticker
+    setInterval(function () {
+      if (!talking) return;
+      if (boundarySeen) {
+        setMouth(queue.length ? queue.shift() : "closed");
+      } else {
+        const ch = speakText[charPos++] || " ";
+        setMouth(charToViseme(ch));
+      }
+    }, 75);
+
+    function startTalking() {
+      talking = true;
+      avatar.classList.add("talking");
+      setState("speaking");
+    }
+
+    function stopTalking() {
+      talking = false;
+      queue = [];
+      avatar.classList.remove("talking");
+      if (state === "speaking") setState("idle");
+    }
+
+    function stopSpeaking() {
+      currentUtterance = null;
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      stopTalking();
+    }
+
+    function speak(text) {
+      if (!("speechSynthesis" in window)) return;
+      stopSpeaking();
+
+      speakText = text;
+      charPos = 0;
+      boundarySeen = false;
+      queue = [];
+
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "en-IN";
+      currentUtterance = u;
+
+      u.onstart = function () {
+        if (u === currentUtterance) startTalking();
+      };
+
+      u.onboundary = function (e) {
+        if (u !== currentUtterance) return;
+        boundarySeen = true;
+        const word = speakText.slice(e.charIndex).split(/\s/)[0];
+        queue = wordToQueue(word);
+        setBrows(-2, -2);
+        setTimeout(function () { if (state === "speaking") setBrows(0, 0); }, 150);
+      };
+
+      u.onend = u.onerror = function () {
+        if (u === currentUtterance) {
+          currentUtterance = null;
+          stopTalking();
+        }
+      };
+
+      window.speechSynthesis.speak(u);
+    }
+
+    /* ================= NAME GREETING ================= */
+    const GREETING = "Hello there, how can I help you?";
+
+    function isNameCall(text) {
+      const t = text.toLowerCase().replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
+      return /^((hey|hi|hello|ok|okay)\s)?(smrithul|smritul|smrithool|smruthul|smrutul|smrithu|smriti|smrithi|smruti)(\s?ai)?$/.test(t);
+    }
+
+    /* ================= ASK AI ================= */
     async function askAI(question) {
       if (!question.trim()) {
         answerDiv.textContent = "Please enter a question.";
         return;
       }
 
-      if (WORKER_URL.includes("YOUR-WORKER-NAME")) {
-        answerDiv.textContent =
-          "Please configure your Cloudflare Worker URL first.";
+      if (isNameCall(question)) {
+        stopSpeaking();
+        answerDiv.textContent = GREETING;
+        setState("idle");
+        speak(GREETING);
         return;
       }
 
+      stopSpeaking();
       askButton.disabled = true;
       answerDiv.textContent = "Thinking...";
+      setState("thinking");
 
       try {
         const response = await fetch(WORKER_URL, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            question: question.trim()
+            question: question.trim(),
+            sessionId: sessionId
           })
         });
 
         const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || "The AI request failed.");
-        }
+        if (!response.ok) throw new Error(data.error || "The AI request failed.");
 
         const answer = data.answer;
-
-        if (!answer) {
-          throw new Error("The AI returned an empty answer.");
-        }
+        if (!answer) throw new Error("The AI returned an empty answer.");
 
         answerDiv.textContent = answer;
-
-        if ("speechSynthesis" in window) {
-          window.speechSynthesis.cancel();
-
-          const speech = new SpeechSynthesisUtterance(answer);
-          speech.lang = "en-IN";
-
-          window.speechSynthesis.speak(speech);
-        }
+        setState("idle");
+        speak(answer);
       } catch (error) {
+        setState("idle");
         answerDiv.textContent =
           "Unable to connect to AI. Please check your Worker URL, " +
           "deployment, and browser connection.";
@@ -149,41 +333,50 @@
     });
 
     questionInput.addEventListener("keydown", function (event) {
-      if (event.key === "Enter") {
-        askAI(questionInput.value);
-      }
+      if (event.key === "Enter") askAI(questionInput.value);
     });
 
+    /* ================= MICROPHONE ================= */
     const SpeechRecognition =
-      window.SpeechRecognition ||
-      window.webkitSpeechRecognition;
+      window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
-
       recognition.lang = "en-IN";
       recognition.continuous = false;
       recognition.interimResults = false;
 
       micButton.addEventListener("click", function () {
-        try {
-          recognition.start();
-          answerDiv.textContent = "Listening...";
-        } catch (error) {
-          answerDiv.textContent =
-            "Microphone is busy. Please try again.";
-        }
+        stopSpeaking(); // stop the previous voice immediately
+
+        try { recognition.abort(); } catch (e) {}
+
+        setTimeout(function () {
+          try {
+            recognition.start();
+          } catch (error) {
+            answerDiv.textContent = "Microphone is busy. Please try again.";
+          }
+        }, 300);
       });
 
-      recognition.onresult = function (event) {
-        const spokenQuestion =
-          event.results[0][0].transcript;
+      recognition.onstart = function () {
+        answerDiv.textContent = "Listening...";
+        setState("listening");
+      };
 
+      recognition.onresult = function (event) {
+        const spokenQuestion = event.results[0][0].transcript;
         questionInput.value = spokenQuestion;
         askAI(spokenQuestion);
       };
 
+      recognition.onend = function () {
+        if (state === "listening") setState("idle");
+      };
+
       recognition.onerror = function () {
+        setState("idle");
         answerDiv.textContent =
           "Microphone error. Please allow microphone access " +
           "or type your question instead.";
@@ -192,6 +385,8 @@
       micButton.disabled = true;
       micButton.textContent = "Microphone unavailable";
     }
+
+    setState("idle");
   </script>
 </body>
 </html>
